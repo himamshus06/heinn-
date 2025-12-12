@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dino Game with a Secret</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f7f7f7;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            position: relative;
+            border: 2px solid #333;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 100%;
+        }
+
+        .hidden { display: none; }
+
+        h1 { font-size: 24px; color: #535353; margin-bottom: 10px; }
+        p { color: #777; }
+        
+        .btn {
+            background-color: #535353;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .btn:hover { background-color: #333; }
+
+        /* The Secret Hint Box */
+        #hint-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff3cd; /* Yellowish warning color */
+            border: 1px solid #ffeeba;
+            color: #856404;
+            display: none; /* Hidden by default */
+            animation: popIn 0.5s ease;
+        }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="600" height="200"></canvas>
+        
+        <div id="ui-layer">
+            <h1 id="status-text">Ready?</h1>
+            <p id="sub-text">Press Spacebar to Jump</p>
+            <button class="btn" id="start-btn" onclick="startGame()">Start Game</button>
+            
+            <div id="hint-box">
+                <strong>🔒 SECRET UNLOCKED:</strong><br>
+                "TRALALERO"
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiLayer = document.getElementById('ui-layer');
+        const statusText = document.getElementById('status-text');
+        const startBtn = document.getElementById('start-btn');
+        const hintBox = document.getElementById('hint-box');
+
+        // Game State Variables
+        let gameRunning = false;
+        let score = 0;
+        let animationId;
+        let frame = 0;
+        let gamesPlayed = 0; // Counts how many times the user died
+
+        // Dino Object
+        const dino = {
+            x: 50,
+            y: 150,
+            width: 30,
+            height: 30,
+            color: '#535353',
+            dy: 0,
+            jumpStrength: 10,
+            gravity: 0.6,
+            grounded: false,
+            draw: function() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            },
+            jump: function() {
+                if (this.grounded) {
+                    this.dy = -this.jumpStrength;
+                    this.grounded = false;
+                }
+            },
+            update: function() {
+                // Apply Gravity
+                this.dy += this.gravity;
+                this.y += this.dy;
+
+                // Ground Collision
+                if (this.y + this.height > canvas.height) {
+                    this.y = canvas.height - this.height;
+                    this.dy = 0;
+                    this.grounded = true;
+                }
+
+                this.draw();
+            }
+        };
+
+        // Obstacles Manager
+        let obstacles = [];
+
+        class Obstacle {
+            constructor() {
+                this.width = 20 + Math.random() * 20;
+                this.height = 30 + Math.random() * 20;
+                this.x = canvas.width;
+                this.y = canvas.height - this.height;
+                this.color = '#d63031';
+                this.speed = 3 + (score * 0.01); // Gets faster as score increases
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            update() {
+                this.x -= this.speed;
+                this.draw();
+            }
+        }
+
+        // --- Game Logic ---
+
+        function startGame() {
+            if (gameRunning) return;
+
+            // Reset variables
+            dino.y = 150;
+            dino.dy = 0;
+            obstacles = [];
+            score = 0;
+            frame = 0;
+            gameRunning = true;
+            
+            // Hide UI
+            uiLayer.classList.add('hidden');
+            hintBox.style.display = 'none'; // Ensure hint is hidden on restart
+
+            animate();
+        }
+
+        function animate() {
+            if (!gameRunning) return;
+
+            animationId = requestAnimationFrame(animate);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frame++;
+
+            // Update Score
+            if (frame % 10 === 0) score++;
+            
+            // Draw Score
+            ctx.fillStyle = '#333';
+            ctx.font = '16px Courier New';
+            ctx.fillText(`Score: ${score}`, 500, 30);
+            ctx.fillText(`Games Played: ${gamesPlayed}`, 20, 30);
+
+            // Handle Dino
+            dino.update();
+
+            // Handle Obstacles
+            if (frame % 100 === 0) { // Spawn rate
+                obstacles.push(new Obstacle());
+            }
+
+            for (let i = 0; i < obstacles.length; i++) {
+                obstacles[i].update();
+
+                // Collision Detection
+                if (
+                    dino.x < obstacles[i].x + obstacles[i].width &&
+                    dino.x + dino.width > obstacles[i].x &&
+                    dino.y < obstacles[i].y + obstacles[i].height &&
+                    dino.y + dino.height > obstacles[i].y
+                ) {
+                    gameOver();
+                }
+
+                // Remove off-screen obstacles
+                if (obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(animationId);
+            gamesPlayed++; // Increment counter
+
+            // Show UI
+            uiLayer.classList.remove('hidden');
+            statusText.innerText = "GAME OVER";
+            startBtn.innerText = "Try Again";
+            
+            // CHECK FOR THE 3rd GAME
+            if (gamesPlayed === 3) {
+                hintBox.style.display = 'block';
+                statusText.innerText = "Congratulations!";
+                document.getElementById('sub-text').innerText = "You unlocked the secret.";
+            } else {
+                let gamesLeft = 3 - gamesPlayed;
+                if(gamesLeft > 0) {
+                    document.getElementById('sub-text').innerText = `Play ${gamesLeft} more time(s) to unlock a secret...`;
+                } else {
+                    document.getElementById('sub-text').innerText = "Press Spacebar to restart";
+                }
+            }
+        }
+
+        // --- Controls ---
+        window.addEventListener('keydown', function(e) {
+            if (e.code === 'Space') {
+                e.preventDefault(); // Stop scrolling
+                if (gameRunning) {
+                    dino.jump();
+                } else {
+                    startGame();
+                }
+            }
+        });
+
+        // Initial Draw
+        ctx.fillStyle = '#eee';
+        ctx.fillRect(0,0, canvas.width, canvas.height);
+
+    </script>
+</body>
+</html>
